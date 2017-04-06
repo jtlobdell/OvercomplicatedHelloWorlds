@@ -8,9 +8,15 @@
 #include <exception>
 #include <queue>
 #include <functional>
-#include <variant>
 
 namespace {
+
+enum Command {
+    GenerateCharacters,
+    FillIndices,
+    MakePrintables,
+    OutputCharacter
+};
 
 // Returns true if successful, false otherwise
 bool outputSingleCharacter(char c) {
@@ -22,9 +28,7 @@ bool outputSingleCharacter(char c) {
     catch (const std::exception&) {
         return false;
     }
-}
-
-}; // anonymous namespace
+} // bool outputSingleCharacter(char)
 
 class PrintableCharacter {
 private:
@@ -37,40 +41,95 @@ public:
             throw std::runtime_error("Failed to print a char.");
         }
     }
-};
+}; // class PrintableCharacter
 
-int main(int argc, char* argv[]) {
-    std::array<char, 0x0e> helloChars {0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x2c, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x21, 0x0a};
-    std::list<std::size_t> helloIndices(helloChars.size());
-    std::vector<PrintableCharacter> helloPrintables;
+std::array<char, 0x0e> helloCharacters;
+std::list<std::size_t> helloIndices(helloCharacters.size());
+std::vector<PrintableCharacter> helloPrintables;
 
-    typedef std::list<std::size_t>::iterator helloIndices_iterator_type;
-    typedef std::function<void(helloIndices_iterator_type, helloIndices_iterator_type, std::size_t)> iota_func_type;
-    typedef std::function<void(PrintableCharacter)> add_printable_func_type;
-    typedef std::function<void(void)> print_printable_func_type;
-    
-    std::queue<std::variant<iota_func_type, add_printable_func_type, print_printable_func_type>> processingSteps;
+void generateCharacters() {
+    helloCharacters = std::array<char, 0x0e> {0x48, 0x65, 0x6c, 0x6c, 0x6f, 0x2c, 0x20, 0x77, 0x6f, 0x72, 0x6c, 0x64, 0x21, 0x0a};
+}
 
-    // Need to finish...
-    
+void fillIndices() {
     std::iota(helloIndices.begin(), helloIndices.end(), (std::size_t) 0);
-    
+}
+
+void makePrintables() {
     std::for_each(helloIndices.begin(),
                   helloIndices.end(),
-                  [&helloPrintables, &helloChars](std::size_t &n) {
-                      helloPrintables.push_back(PrintableCharacter(helloChars[n]));
+                  [](std::size_t &n) {
+                      helloPrintables.push_back(PrintableCharacter(helloCharacters[n]));
                   });
+}
+
+bool outputCharacter() {
+    static auto printableIterator = helloPrintables.begin();
+    bool success;
+
+    if (printableIterator == helloPrintables.end()) {
+        return false; // no more to print
+    }
 
     try {
-        std::for_each(helloPrintables.begin(),
-                      helloPrintables.end(),
-                      [](PrintableCharacter &pc) {
-                          pc();
-                      });
+        (*printableIterator)();
+        success = true;
     }
     catch (std::runtime_error&) {
-        return 1;
+        success = false;
     }
-        
+    
+    printableIterator++;
+    return success;
+
+} // void outputCharacter()
+    
+}; // anonymous namespace
+
+
+int main(int argc, char* argv[]) {
+    std::queue<Command> commandQueue;
+    std::vector<bool> charactersPrinted(helloCharacters.size());
+    std::size_t charactersPrintedIndex = 0;
+
+    // Set up our command queue
+    commandQueue.push(Command::GenerateCharacters);
+    commandQueue.push(Command::FillIndices);
+    commandQueue.push(Command::MakePrintables);
+    std::for_each(charactersPrinted.begin(),
+                  charactersPrinted.end(),
+                  [&commandQueue](bool) {
+                      commandQueue.push(Command::OutputCharacter);
+                  });
+
+    // Run all the commands in the command queue
+    while (!commandQueue.empty()) {
+        switch (commandQueue.front()) {
+            case Command::GenerateCharacters:
+                generateCharacters();
+                break;
+            case Command::FillIndices:
+                fillIndices();
+                break;
+            case Command::MakePrintables:
+                makePrintables();
+                break;
+            case Command::OutputCharacter:
+                charactersPrinted[charactersPrintedIndex++] = outputCharacter();                
+                break;
+            default:
+                std::cerr << "Unknown command encountered in command queue." << std::endl;
+                break;
+        }
+
+        commandQueue.pop();
+    }
+
+    // Make sure everything printed okay
+    std::size_t failedPrintCount = std::count(charactersPrinted.begin(), charactersPrinted.end(), false);
+    if (failedPrintCount > 0) {
+        std::cerr << failedPrintCount << " characters failed to print." << std::endl;
+    }
+    
     return 0;
 }
